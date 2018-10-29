@@ -36,7 +36,7 @@ namespace Gphoto2
         std::string Model();
         std::string Port();
 
-        static std::vector<Gphoto2::DigitalCamera> Autodetect();
+        static std::vector<Gphoto2::DigitalCamera*> Autodetect();
 
         static GPContext* Context();
 

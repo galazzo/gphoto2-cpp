@@ -16,7 +16,7 @@ Gphoto2::DigitalCamera::DigitalCamera(std::string model, std::string port)
 {
     this->model = model;
     this->port = port;
-
+	this->camera = nullptr;
     //this->context = Gphoto2::CreateContext();
 }
 
@@ -49,7 +49,7 @@ GPContext* Gphoto2::DigitalCamera::Context()
     {
         // This is the mandatory part
         Gphoto2::DigitalCamera::_context = gp_context_new();
-
+		
         // All the parts below are optional!
         gp_context_set_error_func (Gphoto2::DigitalCamera::_context, ctx_error_func, NULL);
         gp_context_set_status_func (Gphoto2::DigitalCamera::_context, ctx_status_func, NULL);
@@ -82,9 +82,23 @@ int Gphoto2::DigitalCamera::Open()
             gp_camera_free (camera);
             return ret;
         }
-    }
+		else {
+			cout << "Camera object created" << endl << endl;
+		}
 
-    if (!abilitiesList)
+		ret = gp_camera_init(this->camera, Gphoto2::DigitalCamera::Context());
+		if (ret != GP_OK) 
+		{
+			cout << "Retval of capture_to_file: " << ret << endl;
+			return ret;
+		}
+		else {
+			cout << "Camera init" << endl << endl;
+		}
+	}
+	
+
+    /*if (!abilitiesList)
     {
         // Load all the camera drivers we have...
         ret = gp_abilities_list_new (&abilitiesList);
@@ -95,6 +109,9 @@ int Gphoto2::DigitalCamera::Open()
         if (ret < GP_OK)
             return ret;
     }
+	else {
+		cout << "Camera set up" << endl;
+	}
 
     // First lookup the model / driver
     int m = gp_abilities_list_lookup_model(abilitiesList, camera_model);
@@ -154,7 +171,7 @@ int Gphoto2::DigitalCamera::Open()
     ret = gp_camera_set_port_info (this->camera, pi);
     if (ret < GP_OK)
         return ret;
-
+	*/
     return GP_OK;
 }
 
@@ -299,24 +316,30 @@ int Gphoto2::DigitalCamera::GetConfigValueString (const char *key, char **str)
     CameraWidget		*widget = NULL, *child = NULL;
     CameraWidgetType	type;
     int			ret;
+	
+	try {
+		ret = gp_camera_get_single_config(camera, key, &child, Gphoto2::DigitalCamera::Context());
+		if (ret == GP_OK) {
+			if (!child) fprintf(stderr, "child is NULL?\n");
+			widget = child;
+		}
+		else {
+			ret = gp_camera_get_config(this->camera, &widget, Gphoto2::DigitalCamera::Context());
+			if (ret < GP_OK) {
+				fprintf(stderr, "camera_get_config failed: %d\n", ret);
+				return ret;
+			}
 
-    ret = gp_camera_get_single_config (camera, key, &child, Gphoto2::DigitalCamera::Context());
-    if (ret == GP_OK) {
-        if (!child) fprintf(stderr,"child is NULL?\n");
-        widget = child;
-    } else {
-            ret = gp_camera_get_config (this->camera, &widget, Gphoto2::DigitalCamera::Context());
-            if (ret < GP_OK) {
-                fprintf (stderr, "camera_get_config failed: %d\n", ret);
-                return ret;
-            }
-
-            ret = _lookup_widget (widget, key, &child);
-            if (ret < GP_OK) {
-                fprintf (stderr, "lookup widget failed: %d\n", ret);
-                goto out;
-            }
-    }
+			ret = _lookup_widget(widget, key, &child);
+			if (ret < GP_OK) {
+				fprintf(stderr, "lookup widget failed: %d\n", ret);
+				goto out;
+			}
+		}
+	}
+	catch (exception& ex) {
+		cout << ex.what() << endl;
+	}
 
     // This type check is optional, if you know what type the label
     // has already. If you are not sure, better check. */
@@ -490,13 +513,20 @@ int Gphoto2::DigitalCamera::CanonEnableCapture(int onoff)
     CameraWidgetType	type;
     int			ret;
 
-    ret = gp_camera_get_single_config (this->camera, "capture", &widget, Gphoto2::DigitalCamera::Context());
+	std::cout << "beta #1" << endl;
+	try {
+		ret = gp_camera_get_single_config(this->camera, "capture", &widget, Gphoto2::DigitalCamera::Context());
+	}
+	catch (exception& ex) {
+		cout << ex.what() << endl;
+	}
+
     if (ret < GP_OK)
     {
         fprintf (stderr, "camera_get_config failed: %s\n", gp_result_as_string(ret));
         return ret;
     }
-
+	std::cout << "beta #2" << endl;
     ret = gp_widget_get_type (widget, &type);
     if (ret < GP_OK)
     {
@@ -504,6 +534,7 @@ int Gphoto2::DigitalCamera::CanonEnableCapture(int onoff)
         goto out;
     }
 
+	std::cout << "beta #3" << endl;
     switch (type)
     {
     case GP_WIDGET_TOGGLE:
@@ -514,20 +545,27 @@ int Gphoto2::DigitalCamera::CanonEnableCapture(int onoff)
             goto out;
     }
 
+	std::cout << "beta #4" << endl;
     // Now set the toggle to the wanted value
     ret = gp_widget_set_value (widget, &onoff);
     if (ret < GP_OK) {
             fprintf (stderr, "toggling Canon capture to %d failed with %d\n", onoff, ret);
             goto out;
     }
+
+	std::cout << "beta #5" << endl;
     // OK
     ret = gp_camera_set_single_config(this->camera, "capture", widget, Gphoto2::DigitalCamera::Context());
     if (ret < GP_OK) {
             fprintf (stderr, "camera_set_config failed: %d\n", ret);
             return ret;
     }
+
+	std::cout << "beta #6" << endl;
 out:
+	std::cout << "beta #7" << endl;
     gp_widget_free (widget);
+	std::cout << "beta #8" << endl;
     return ret;
 }
 
@@ -537,9 +575,9 @@ out:
  *
  * This function does not open nor initialize the cameras yet.
  */
-std::vector<Gphoto2::DigitalCamera> Gphoto2::DigitalCamera::Autodetect()
+std::vector<Gphoto2::DigitalCamera*> Gphoto2::DigitalCamera::Autodetect()
 {
-    std::vector<Gphoto2::DigitalCamera> result;
+    std::vector<Gphoto2::DigitalCamera*> result;
     CameraList *list;
     const char *camera_model = NULL;
     const char* camera_port = NULL;
@@ -549,7 +587,7 @@ std::vector<Gphoto2::DigitalCamera> Gphoto2::DigitalCamera::Autodetect()
     int ret = gp_camera_autodetect (list, Gphoto2::DigitalCamera::Context());
     if (ret < GP_OK)
     {
-        cout << "No camera auto detected: " << gp_result_as_string(ret) << endl;
+        std::cout << "No camera auto detected: " << gp_result_as_string(ret) << endl;
 
         //gp_camera_free (camera);
         gp_list_free (list);
@@ -564,9 +602,10 @@ std::vector<Gphoto2::DigitalCamera> Gphoto2::DigitalCamera::Autodetect()
             gp_list_get_name (list, i, &camera_model);
             gp_list_get_value (list, i, &camera_port);
 
-            std::cout << camera_model << " - " << camera_port << std::endl;
-            Gphoto2::DigitalCamera detectedCamera(camera_model, camera_port);
-            result.push_back(detectedCamera);
+            std::cout << camera_model << " - " << camera_port << std::endl;			
+            Gphoto2::DigitalCamera* detectedCamera = new Gphoto2::DigitalCamera(camera_model, camera_port);
+			
+            result.push_back(detectedCamera);			
         }
     }
     return result;
